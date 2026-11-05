@@ -93,5 +93,23 @@ def test_unusable_responses(transport: httpx.MockTransport) -> None:
         run(make(transport))
 
 
+def reasoning_only(finish: str) -> httpx.MockTransport:
+    body = {
+        "choices": [
+            {"finish_reason": finish, "message": {"content": None, "reasoning": "thinking"}}
+        ]
+    }
+    return httpx.MockTransport(lambda r: httpx.Response(200, json=body))
+
+
+def test_reasoning_model_that_spends_its_budget_is_a_retryable_failure() -> None:
+    with pytest.raises(ProviderUnavailable, match="token budget exhausted"):
+        run(make(reasoning_only("length")))
+    with pytest.raises(ProviderUnavailable, match="empty completion"):
+        run(make(reasoning_only("stop")))
+    with pytest.raises(ProviderUnavailable, match="empty completion"):
+        run(make(ok(content="   ")))
+
+
 def test_aclose() -> None:
     asyncio.run(make(ok()).aclose())
