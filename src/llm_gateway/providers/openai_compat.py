@@ -52,9 +52,15 @@ class OpenAICompatProvider:
         if status >= 400:
             raise ProviderRejected(f"upstream status {status}")
         try:
-            content = response.json()["choices"][0]["message"]["content"]
-        except (ValueError, KeyError, IndexError, TypeError) as error:
+            choice = response.json()["choices"][0]
+            content = choice["message"]["content"]
+            finish = choice.get("finish_reason")
+        except (ValueError, KeyError, IndexError, TypeError, AttributeError) as error:
             raise ProviderUnavailable("upstream returned an unusable response") from error
+        if content is None or (isinstance(content, str) and not content.strip()):
+            # Reasoning models can spend the whole token budget thinking and return no text.
+            reason = "token budget exhausted" if finish == "length" else "empty completion"
+            raise ProviderUnavailable(f"upstream returned no text ({reason})")
         if not isinstance(content, str):
             raise ProviderUnavailable("upstream returned an unusable response")
         return content
