@@ -62,5 +62,5 @@ and is skipped when agent-harness is not installed.
 
 ## Limits
 
-Text only: no tool calling, no streaming, no token usage (see the ADR). The providers are fakes, so this
+The harness requires Python 3.12+, so the integration test runs on the 3.13 CI job and is skipped on 3.11. Text only: no tool calling, no streaming, no token usage (see the ADR). The providers are fakes, so this
 demonstrates control flow, not model behaviour or latency. The harness is pinned by commit SHA.

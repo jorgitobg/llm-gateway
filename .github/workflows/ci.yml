@@ -20,7 +20,8 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
       - run: python -m pip install -e '.[dev]'
-      - name: agent-harness (pinned commit) for the integration test and demo
+      - name: agent-harness (pinned commit; needs Python 3.12+) for the integration test
+        if: matrix.python-version != '3.11'
         run: python -m pip install "agent-harness @ git+https://github.com/jorgitobg/agent-harness@40548b516790940430baf869bede12eee43b3c2a"
       - run: ruff check .
       - run: ruff format --check .
