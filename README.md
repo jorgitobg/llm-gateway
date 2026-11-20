@@ -134,6 +134,7 @@ Reasoning models need a larger output budget than plain chat models. One free mo
 
 - `POST /v1/generate` with `{"prompt", "system"?}`
 - `POST /v1/summarize` with `{"text"}`: renders the versioned prompt `summarize/v1`
+- `POST /v1/chat/completions`: text-only OpenAI-style subset (no tools, no streaming, no usage); see [ADR 0003](docs/adr/0003-openai-compatible-chat-endpoint.md) and [running agent-harness through the gateway](docs/integration/agent-harness.md)
 - `GET /health` (process is up) and `GET /ready` (configured providers)
 
 Every response carries an `x-request-id`. A caller-supplied id is kept only if it is short and log-safe; otherwise a new one is minted.
@@ -146,7 +147,7 @@ Every response carries an `x-request-id`. A caller-supplied id is kept only if i
 - **Content-free logging.** One JSON line per request: id, method, path, status, duration, provider and attempt outcomes. Prompts, system messages, completions and upstream bodies are never logged. A test asserts this.
 - **Prompt hygiene, honestly scoped.** The summarize template wraps user text in delimiters and neutralises look-alike markers. That reduces, but does not eliminate, prompt injection.
 
-Decisions: [ADR 0001](docs/adr/0001-provider-port-and-fallback.md), [ADR 0002](docs/adr/0002-content-free-logging.md). Specification: [docs/spec/0001-llm-gateway.md](docs/spec/0001-llm-gateway.md).
+Decisions: [ADR 0001](docs/adr/0001-provider-port-and-fallback.md), [ADR 0002](docs/adr/0002-content-free-logging.md), [ADR 0003](docs/adr/0003-openai-compatible-chat-endpoint.md). Specification: [docs/spec/0001-llm-gateway.md](docs/spec/0001-llm-gateway.md).
 
 ## Limitations
 
