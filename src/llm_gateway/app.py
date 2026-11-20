@@ -5,7 +5,7 @@ import os
 import re
 import time
 import uuid
-from collections.abc import AsyncGenerator, Awaitable, Callable
+from collections.abc import AsyncGenerator, Awaitable, Callable, Sequence
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, Response
@@ -20,6 +20,11 @@ from llm_gateway.providers import AllProvidersFailed, CompletionRequest, Provide
 from llm_gateway.providers.chain import Attempt
 from llm_gateway.schemas import (
     AttemptOut,
+    ChatChoice,
+    ChatChoiceMessage,
+    ChatCompletionRequest,
+    ChatCompletionResponse,
+    ChatMessage,
     CompletionResponse,
     GenerateRequest,
     SummarizeRequest,
@@ -41,6 +46,19 @@ def _error(status: int, code: str, message: str, request_id: str, **extra: objec
     body: dict[str, object] = {"code": code, "message": message, "request_id": request_id}
     body.update(extra)
     return JSONResponse({"error": body}, status_code=status)
+
+
+def flatten_messages(messages: Sequence[ChatMessage]) -> tuple[str | None, str]:
+    """Map a chat transcript onto the gateway's (system, prompt) pair.
+
+    System messages are joined into ``system``. A lone user turn is passed through verbatim;
+    longer transcripts become ``role: text`` lines, which loses provider-native roles.
+    """
+    system = "\n".join(m.content for m in messages if m.role == "system") or None
+    turns = [m for m in messages if m.role != "system"]
+    if len(turns) == 1 and turns[0].role == "user":
+        return system, turns[0].content
+    return system, "\n".join(f"{m.role}: {m.content}" for m in turns)
 
 
 def create_app(*, chain: ProviderChain | None = None, settings: Settings | None = None) -> FastAPI:
@@ -107,11 +125,19 @@ def create_app(*, chain: ProviderChain | None = None, settings: Settings | None 
         return _error(exc.status, exc.code, exc.message, request.state.request_id)
 
     async def _complete(
-        request: Request, prompt: str, system: str | None, version: str | None
+        request: Request,
+        prompt: str,
+        system: str | None,
+        version: str | None,
+        max_tokens: int | None = None,
     ) -> CompletionResponse:
         if len(prompt) > cfg.max_prompt_chars or (system and len(system) > cfg.max_prompt_chars):
             raise GatewayError(413, "payload_too_large", "Prompt exceeds the configured limit")
-        result = await active.run(CompletionRequest(prompt, system, cfg.max_output_tokens))
+        result = await active.run(
+            CompletionRequest(
+                prompt, system, min(max_tokens or cfg.max_output_tokens, cfg.max_output_tokens)
+            )
+        )
         request.state.provider = result.provider
         request.state.attempts = [a.outcome for a in result.attempts]
         text = result.text[: cfg.max_output_chars]
@@ -140,6 +166,27 @@ def create_app(*, chain: ProviderChain | None = None, settings: Settings | None 
         if len(body.text) > cfg.max_prompt_chars:
             raise GatewayError(413, "payload_too_large", "Text exceeds the configured limit")
         return await _complete(request, render_summarize(body.text), None, SUMMARIZE_VERSION)
+
+    @app.post("/v1/chat/completions", response_model=ChatCompletionResponse)
+    async def chat_completions(
+        request: Request, body: ChatCompletionRequest
+    ) -> ChatCompletionResponse:
+        if body.stream:
+            raise GatewayError(422, "streaming_not_supported", "Streaming is not supported")
+        if body.tools:
+            raise GatewayError(422, "tools_not_supported", "Tool calling is not supported")
+        system, prompt = flatten_messages(body.messages)
+        result = await _complete(request, prompt, system, None, body.max_tokens)
+        return ChatCompletionResponse(
+            id=f"chatcmpl-{request.state.request_id}",
+            model=result.provider,
+            choices=[
+                ChatChoice(
+                    message=ChatChoiceMessage(content=result.text),
+                    finish_reason="length" if result.truncated else "stop",
+                )
+            ],
+        )
 
     return app
 
