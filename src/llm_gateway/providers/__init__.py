@@ -1,7 +1,13 @@
 from __future__ import annotations
 
 from llm_gateway.providers.base import CompletionRequest, Provider
-from llm_gateway.providers.chain import AllProvidersFailed, Attempt, ChainResult, ProviderChain
+from llm_gateway.providers.chain import (
+    AllProvidersFailed,
+    Attempt,
+    ChainResult,
+    ProviderChain,
+    RetryPolicy,
+)
 from llm_gateway.providers.fake import FakeProvider
 from llm_gateway.providers.openai_compat import OpenAICompatProvider
 from llm_gateway.settings import Settings
@@ -15,6 +21,7 @@ __all__ = [
     "OpenAICompatProvider",
     "Provider",
     "ProviderChain",
+    "RetryPolicy",
     "build_chain",
 ]
 
@@ -37,4 +44,9 @@ def build_chain(settings: Settings) -> ProviderChain:
         timeout_s=settings.provider_timeout_s,
         breaker_threshold=settings.breaker_threshold,
         breaker_cooldown_s=settings.breaker_cooldown_s,
+        retry=RetryPolicy(
+            settings.retry_attempts,
+            backoff_s=settings.retry_backoff_s,
+            deadline_s=settings.retry_deadline_s,
+        ),
     )

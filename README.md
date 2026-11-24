@@ -147,12 +147,22 @@ Every response carries an `x-request-id`. A caller-supplied id is kept only if i
 - **Content-free logging.** One JSON line per request: id, method, path, status, duration, provider and attempt outcomes. Prompts, system messages, completions and upstream bodies are never logged. A test asserts this.
 - **Prompt hygiene, honestly scoped.** The summarize template wraps user text in delimiters and neutralises look-alike markers. That reduces, but does not eliminate, prompt injection.
 
-Decisions: [ADR 0001](docs/adr/0001-provider-port-and-fallback.md), [ADR 0002](docs/adr/0002-content-free-logging.md), [ADR 0003](docs/adr/0003-openai-compatible-chat-endpoint.md). Specification: [docs/spec/0001-llm-gateway.md](docs/spec/0001-llm-gateway.md).
+Decisions: [ADR 0001](docs/adr/0001-provider-port-and-fallback.md), [ADR 0002](docs/adr/0002-content-free-logging.md), [ADR 0003](docs/adr/0003-openai-compatible-chat-endpoint.md), [ADR 0004](docs/adr/0004-opt-in-same-provider-retry.md). Specification: [docs/spec/0001-llm-gateway.md](docs/spec/0001-llm-gateway.md).
+
+## Optional same-provider retry
+
+Off by default (`LLM_GATEWAY_RETRY_ATTEMPTS=1`: the first failure moves on, as before). With more attempts, a transient failure (timeout or retryable error) is retried on the same provider before failing over; rejections (4xx) are never retried.
+
+- `LLM_GATEWAY_RETRY_ATTEMPTS` (1 to 10): tries per provider per request.
+- `LLM_GATEWAY_RETRY_BACKOFF_S`: fixed pause between tries (default 0).
+- `LLM_GATEWAY_RETRY_DEADLINE_S`: total time budget per provider per request; every try's timeout is capped to what is left of it and no retry starts once the budget would be spent. Unset means only the attempt count bounds it.
+
+Every try appears as its own entry in the response `attempts` list (same provider repeated); logs stay content-free. The circuit breaker counts one failure per provider per request after retries are exhausted, not one per try. Retries multiply latency and, on a paid upstream, cost: the worst case is attempts x provider timeout per provider unless a deadline is set. See [ADR 0004](docs/adr/0004-opt-in-same-provider-retry.md). Tested offline with a fake clock and sleep only; it has not been exercised against a live provider.
 
 ## Limitations
 
 - In-memory breaker state: it is per process, so several workers each learn about an outage separately.
-- No retry of the same provider and no hedging; the first failure moves on.
+- Retrying the same provider is opt-in and off by default (see below); there is no hedging. By default the first failure moves on.
 - The offline provider shows the control flow, not model behaviour.
 - Output tokens are capped but reasoning tokens count against the cap on some models (see above).
 - Character limits stand in for token limits.
