@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 
 import pytest
 
@@ -187,3 +188,36 @@ def test_settings_default_off_and_env_wiring() -> None:
     built = build_chain(cfg)
     assert built.retry == RetryPolicy(3, backoff_s=0.25, deadline_s=5.0)
     assert build_chain(Settings()).retry == RetryPolicy()
+
+
+def test_no_retry_starts_when_backoff_consumes_the_whole_deadline() -> None:
+    ft = FakeTime()
+    a = Scripted("a", ProviderUnavailable("x"), "would-succeed")
+    b = Scripted("b", "from-b")
+    result = asyncio.run(chain([a, b], ft, attempts=3, backoff=1.0, deadline=1.0).run(REQ))
+    assert a.calls == 1 and result.provider == "b"
+
+
+def test_deadline_caps_the_first_attempt_too() -> None:
+    class Hang:
+        name = "hang"
+
+        async def complete(self, request: CompletionRequest) -> str:
+            await asyncio.sleep(3600)
+            return "never"
+
+    c = ProviderChain(
+        [Hang(), Scripted("b", "from-b")],
+        timeout_s=30.0,
+        retry=RetryPolicy(3, deadline_s=0.05),
+    )
+    started = time.monotonic()
+    result = asyncio.run(c.run(REQ))
+    assert time.monotonic() - started < 5.0
+    assert [x.outcome for x in result.attempts] == ["timeout", "ok"]
+
+
+@pytest.mark.parametrize("raw", ["2.5", "0.5", "abc", ""])
+def test_retry_attempts_env_must_be_a_whole_number(raw: str) -> None:
+    with pytest.raises(ValueError):
+        Settings.from_env({"LLM_GATEWAY_RETRY_ATTEMPTS": raw})

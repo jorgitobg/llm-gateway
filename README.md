@@ -155,7 +155,7 @@ Off by default (`LLM_GATEWAY_RETRY_ATTEMPTS=1`: the first failure moves on, as b
 
 - `LLM_GATEWAY_RETRY_ATTEMPTS` (1 to 10): tries per provider per request.
 - `LLM_GATEWAY_RETRY_BACKOFF_S`: fixed pause between tries (default 0).
-- `LLM_GATEWAY_RETRY_DEADLINE_S`: total time budget per provider per request; no retry starts if it would end past the budget. Unset means only the attempt count bounds it.
+- `LLM_GATEWAY_RETRY_DEADLINE_S`: total time budget per provider per request; every try's timeout is capped to what is left of it and no retry starts once the budget would be spent. Unset means only the attempt count bounds it.
 
 Every try appears as its own entry in the response `attempts` list (same provider repeated); logs stay content-free. The circuit breaker counts one failure per provider per request after retries are exhausted, not one per try. Retries multiply latency and, on a paid upstream, cost: the worst case is attempts x provider timeout per provider unless a deadline is set. See [ADR 0004](docs/adr/0004-opt-in-same-provider-retry.md). Tested offline with a fake clock and sleep only; it has not been exercised against a live provider.
 

@@ -61,7 +61,7 @@ class Settings:
             provider_timeout_s=num("LLM_GATEWAY_PROVIDER_TIMEOUT_S", 10.0),
             breaker_threshold=int(num("LLM_GATEWAY_BREAKER_THRESHOLD", 3)),
             breaker_cooldown_s=num("LLM_GATEWAY_BREAKER_COOLDOWN_S", 30.0),
-            retry_attempts=int(num("LLM_GATEWAY_RETRY_ATTEMPTS", 1)),
+            retry_attempts=int(env.get("LLM_GATEWAY_RETRY_ATTEMPTS", "1")),
             retry_backoff_s=num("LLM_GATEWAY_RETRY_BACKOFF_S", 0.0),
             retry_deadline_s=(
                 float(env["LLM_GATEWAY_RETRY_DEADLINE_S"])

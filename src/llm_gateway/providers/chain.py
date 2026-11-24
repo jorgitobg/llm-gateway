@@ -32,8 +32,8 @@ class RetryPolicy:
 
     ``max_attempts`` counts tries per provider per request (1 = no retry, the default).
     ``backoff_s`` is a fixed pause between tries. ``deadline_s`` bounds the total time spent on
-    one provider for one request: no retry starts if its pause would end after the deadline,
-    and a retry's timeout never exceeds what is left of it.
+    one provider for one request: no retry starts unless time remains after its pause, and every
+    try's timeout is capped to what is left of the budget (the first try gets all of it).
     """
 
     max_attempts: int = 1
@@ -109,7 +109,7 @@ class ProviderChain:
     def _may_retry(self, started: float, policy: RetryPolicy) -> bool:
         if policy.deadline_s is None:
             return True
-        return self._clock() + policy.backoff_s <= started + policy.deadline_s
+        return self._clock() + policy.backoff_s < started + policy.deadline_s
 
     async def run(self, request: CompletionRequest) -> ChainResult:
         attempts: list[Attempt] = []
@@ -122,7 +122,7 @@ class ProviderChain:
             started = self._clock()
             for attempt_no in range(1, policy.max_attempts + 1):
                 timeout_s = self._timeout_s
-                if attempt_no > 1 and policy.deadline_s is not None:
+                if policy.deadline_s is not None:
                     timeout_s = min(timeout_s, started + policy.deadline_s - self._clock())
                 try:
                     async with asyncio.timeout(timeout_s):
